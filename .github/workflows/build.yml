@@ -1,0 +1,48 @@
+name: Build IPA
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: |
+          ls /Applications | grep Xcode
+          sudo xcode-select -s /Applications/Xcode_15.4.app
+          xcodebuild -version
+      - name: Generate project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild -project Wavebox.xcodeproj -scheme Wavebox -configuration Release \
+            -sdk iphoneos -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build 2>&1 | grep -E "error|warning: unre|BUILD|\*\*" || true
+          test -d build/Build/Products/Release-iphoneos/Wavebox.app
+      - name: Package
+        run: |
+          APP=build/Build/Products/Release-iphoneos/Wavebox.app
+          codesign --force --deep --sign - "$APP"
+          mkdir Payload
+          cp -R "$APP" Payload/
+          zip -qr Wavebox.ipa Payload
+          ls -la Wavebox.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Wavebox-ipa
+          path: Wavebox.ipa
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest -y --cleanup-tag || true
+          sleep 3
+          gh release create latest Wavebox.ipa --title "Latest build" --notes "Built from ${GITHUB_SHA::7}" --target "$GITHUB_SHA"
