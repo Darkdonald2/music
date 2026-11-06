@@ -7,13 +7,16 @@ permissions:
   contents: write
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode
         run: |
-          ls /Applications | grep Xcode
-          sudo xcode-select -s /Applications/Xcode_15.4.app
+          ls -d /Applications/Xcode_*.app
+          # Oldest installed Xcode: newer ones may not build for iOS 12.
+          XCODE=$(ls -d /Applications/Xcode_[0-9]*.app | sort -V | head -1)
+          echo "Using $XCODE"
+          sudo xcode-select -s "$XCODE"
           xcodebuild -version
       - name: Generate project
         run: |
